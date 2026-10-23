@@ -1,0 +1,247 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+function pointFromEvent(event, element) {
+  const rect = element.getBoundingClientRect()
+  return {
+    x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+    y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+  }
+}
+
+function drawPath(context, points, width, height) {
+  if (!points.length) return
+  context.beginPath()
+  context.moveTo(points[0].x * width, points[0].y * height)
+  points.slice(1).forEach((point) => {
+    context.lineTo(point.x * width, point.y * height)
+  })
+}
+
+function drawMask(maskContext, operations, width, height) {
+  maskContext.clearRect(0, 0, width, height)
+  maskContext.fillStyle = '#ffffff'
+  operations.forEach((operation) => {
+    if (operation.type === 'polygon') {
+      drawPath(maskContext, operation.points, width, height)
+      maskContext.closePath()
+      maskContext.fill()
+    }
+    if (operation.type === 'brush') {
+      maskContext.globalCompositeOperation =
+        operation.mode === 'eraser' ? 'destination-out' : 'source-over'
+      maskContext.lineCap = 'round'
+      maskContext.lineJoin = 'round'
+      maskContext.lineWidth = operation.size * width
+      drawPath(maskContext, operation.points, width, height)
+      maskContext.stroke()
+      maskContext.globalCompositeOperation = 'source-over'
+    }
+  })
+}
+
+function drawOutline(context, operations, draftPolygon, width, height) {
+  context.clearRect(0, 0, width, height)
+  context.lineWidth = 1.5
+  context.setLineDash([6, 5])
+  context.strokeStyle = 'rgba(255, 253, 248, 0.95)'
+  operations.forEach((operation) => {
+    if (operation.type !== 'polygon') return
+    drawPath(context, operation.points, width, height)
+    context.closePath()
+    context.stroke()
+  })
+
+  if (draftPolygon.length) {
+    context.setLineDash([5, 4])
+    context.strokeStyle = '#c9856c'
+    drawPath(context, draftPolygon, width, height)
+    context.stroke()
+    context.setLineDash([])
+    draftPolygon.forEach((point, index) => {
+      context.beginPath()
+      context.fillStyle = index === 0 ? '#c9856c' : '#fffdf8'
+      context.arc(point.x * width, point.y * height, 4, 0, Math.PI * 2)
+      context.fill()
+      context.strokeStyle = '#684a36'
+      context.stroke()
+    })
+  }
+  context.setLineDash([])
+}
+
+function EditorCanvas({
+  image,
+  operations,
+  draftPolygon,
+  tool,
+  brushSize,
+  selectedColor,
+  blendStrength,
+  isBefore,
+  onAddPoint,
+  onFinishPolygon,
+  onCancelPolygon,
+  onAddOperation,
+  onDownloadReady,
+}) {
+  const displayCanvasRef = useRef(null)
+  const overlayCanvasRef = useRef(null)
+  const maskCanvasRef = useRef(null)
+  const imageRef = useRef(null)
+  const frameRef = useRef(null)
+  const strokePointsRef = useRef([])
+  const onDownloadReadyRef = useRef(onDownloadReady)
+  const [isDrawing, setIsDrawing] = useState(false)
+
+  useEffect(() => {
+    onDownloadReadyRef.current = onDownloadReady
+  }, [onDownloadReady])
+
+  const render = useCallback(() => {
+    const canvas = displayCanvasRef.current
+    const overlay = overlayCanvasRef.current
+    const frame = frameRef.current
+    if (!canvas || !overlay || !frame || !imageRef.current) return
+
+    const rect = frame.getBoundingClientRect()
+    const ratio = window.devicePixelRatio || 1
+    const width = Math.max(1, Math.floor(rect.width * ratio))
+    const height = Math.max(1, Math.floor(rect.height * ratio))
+    ;[canvas, overlay].forEach((target) => {
+      target.width = width
+      target.height = height
+      target.style.width = `${rect.width}px`
+      target.style.height = `${rect.height}px`
+    })
+
+    const mask = maskCanvasRef.current || document.createElement('canvas')
+    mask.width = width
+    mask.height = height
+    maskCanvasRef.current = mask
+    const maskContext = mask.getContext('2d')
+    maskContext.imageSmoothingEnabled = true
+    drawMask(maskContext, operations, width, height)
+
+    const context = canvas.getContext('2d')
+    context.clearRect(0, 0, width, height)
+    context.drawImage(imageRef.current, 0, 0, width, height)
+
+    if (!isBefore && operations.length) {
+      const colourLayer = document.createElement('canvas')
+      colourLayer.width = width
+      colourLayer.height = height
+      const colourContext = colourLayer.getContext('2d')
+      colourContext.fillStyle = selectedColor
+      colourContext.fillRect(0, 0, width, height)
+      colourContext.globalCompositeOperation = 'destination-in'
+      colourContext.drawImage(mask, 0, 0)
+      context.globalAlpha = blendStrength / 100
+      context.globalCompositeOperation = 'multiply'
+      context.drawImage(colourLayer, 0, 0)
+      context.globalAlpha = 1
+      context.globalCompositeOperation = 'source-over'
+    }
+
+    drawOutline(overlay.getContext('2d'), operations, draftPolygon, width, height)
+    onDownloadReadyRef.current(() => canvas.toDataURL('image/png'))
+  }, [blendStrength, draftPolygon, isBefore, operations, selectedColor])
+
+  useEffect(() => {
+    if (!image) {
+      imageRef.current = null
+      return
+    }
+    imageRef.current = image.image
+  }, [image])
+
+  useEffect(() => {
+    if (!image) return undefined
+    render()
+    const observer = new ResizeObserver(render)
+    observer.observe(frameRef.current)
+    window.addEventListener('resize', render)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', render)
+    }
+  }, [image, render])
+
+  useEffect(() => {
+    if (!draftPolygon.length) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onCancelPolygon()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [draftPolygon.length, onCancelPolygon])
+
+  const handlePointerDown = (event) => {
+    if (!imageRef.current) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const point = pointFromEvent(event, event.currentTarget)
+    if (tool === 'polygon') {
+      if (draftPolygon.length >= 3) {
+        const first = draftPolygon[0]
+        const distance = Math.hypot(point.x - first.x, point.y - first.y)
+        if (distance < 0.035) {
+          onFinishPolygon()
+          return
+        }
+      }
+      onAddPoint(point)
+      return
+    }
+    setIsDrawing(true)
+    strokePointsRef.current = [point]
+  }
+
+  const handlePointerMove = (event) => {
+    if (!isDrawing || (tool !== 'brush' && tool !== 'eraser')) return
+    const point = pointFromEvent(event, event.currentTarget)
+    strokePointsRef.current.push(point)
+  }
+
+  const handlePointerUp = () => {
+    if (!isDrawing) return
+    setIsDrawing(false)
+    if (strokePointsRef.current.length > 1) {
+      onAddOperation({
+        type: 'brush',
+        mode: tool,
+        size: brushSize / event.currentTarget.getBoundingClientRect().width,
+        points: strokePointsRef.current,
+      })
+    }
+    strokePointsRef.current = []
+  }
+
+  return (
+    <div className={`editor-canvas-frame ${!image ? 'is-empty' : ''}`} ref={frameRef}>
+      {!image && (
+        <div className="editor-empty-state">
+          <div className="editor-empty-icon">+</div>
+          <h2>Bring a room to life.</h2>
+          <p>Upload a JPG, PNG or WebP photo to start selecting walls manually.</p>
+          <span>PaintViz is a visual preview tool — not an exact paint simulation.</span>
+        </div>
+      )}
+      {image && (
+        <>
+          <canvas ref={displayCanvasRef} className="editor-display-canvas" />
+          <canvas
+            ref={overlayCanvasRef}
+            className="editor-overlay-canvas"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onDoubleClick={tool === 'polygon' ? onFinishPolygon : undefined}
+            aria-label="Room image selection canvas"
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+export default EditorCanvas

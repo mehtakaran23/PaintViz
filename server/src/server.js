@@ -16,7 +16,17 @@ async function startServer() {
 
     const app = express()
 
-    app.use(cors())
+    app.use(cors({
+      origin: (origin, callback) => {
+        if (!origin || env.clientUrls.includes(origin)) {
+          callback(null, true)
+          return
+        }
+        const error = new Error('Origin is not allowed by the server')
+        error.statusCode = 403
+        callback(error)
+      },
+    }))
     app.use(express.json({ limit: '2mb' }))
     app.use('/api/health', healthRouter)
     app.use('/api/auth', authRouter)
@@ -58,7 +68,7 @@ async function startServer() {
       })
     })
 
-    app.listen(env.port, () => {
+    app.listen(env.port, '0.0.0.0', () => {
       console.log(`Server listening on port ${env.port}`)
     })
   } catch (error) {

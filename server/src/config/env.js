@@ -14,6 +14,10 @@ if (!process.env.MONGODB_URI) {
 
 const port = Number.parseInt(process.env.PORT ?? '5000', 10)
 const jwtSecret = process.env.JWT_SECRET?.trim()
+const clientUrls = (process.env.CLIENT_URL ?? 'http://localhost:5173')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535')
@@ -26,4 +30,5 @@ if (!jwtSecret) {
 export const env = {
   port,
   jwtSecret,
+  clientUrls,
 }

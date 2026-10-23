@@ -1,6 +1,6 @@
 import { Eraser, Hand, MousePointer2, Palette, Search, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { paintCatalogue, paintCategories } from '../../data/paintCatalogue.js'
+import { paintCatalogue as localCatalogue, paintCategories as localCategories } from '../../data/paintCatalogue.js'
 
 function EditorSidebar({
   activeTab,
@@ -12,8 +12,16 @@ function EditorSidebar({
   blendStrength,
   setBlendStrength,
   selectedColor,
-  selectColor,
+  onSelectColor,
   recentColors,
+  regions,
+  activeRegionId,
+  setActiveRegionId,
+  renameRegion,
+  deleteRegion,
+  catalogue = localCatalogue,
+  categories = localCategories,
+  catalogueLoading = false,
 }) {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All colours')
@@ -21,13 +29,13 @@ function EditorSidebar({
   const [customError, setCustomError] = useState('')
   const filteredPalette = useMemo(() => {
     const query = search.trim().toLowerCase()
-    return paintCatalogue.filter((colour) =>
+    return catalogue.filter((colour) =>
       (category === 'All colours' || colour.category === category) &&
       `${colour.name} ${colour.category} ${colour.hex}`.toLowerCase().includes(query),
     )
-  }, [category, search])
+  }, [catalogue, category, search])
   const selectedColour =
-    paintCatalogue.find((colour) => colour.hex === selectedColor) ||
+    catalogue.find((colour) => colour.hex === selectedColor) ||
     { name: 'Custom colour', category: 'Custom', hex: selectedColor }
 
   const submitCustomColour = (event) => {
@@ -36,7 +44,7 @@ function EditorSidebar({
       setCustomError('Use a six-digit hex code, for example #A8B29C.')
       return
     }
-    selectColor(customHex)
+    onSelectColor(customHex)
     setCustomHex(customHex.toUpperCase())
     setCustomError('')
   }
@@ -59,12 +67,13 @@ function EditorSidebar({
             <h2>Find your tone.</h2>
             <p>Choose a shade, then click inside a selected wall to preview it.</p>
           </div>
+          {catalogueLoading && <div className="editor-catalogue-status" role="status">Loading saved colour catalogue…</div>}
           <label className="editor-search">
             <Search size={15} />
             <input aria-label="Search colours by name or hex code" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or #hex" />
           </label>
           <div className="editor-category-scroll" aria-label="Colour categories">
-            {paintCategories.map((item) => (
+            {categories.map((item) => (
               <button type="button" className={`editor-category-chip ${category === item ? 'active' : ''}`} key={item} onClick={() => setCategory(item)}>
                 {item}
               </button>
@@ -74,6 +83,25 @@ function EditorSidebar({
             <span className="editor-selected-swatch" style={{ backgroundColor: selectedColour.hex }} />
             <span><small>Selected colour</small><strong>{selectedColour.name}</strong><em>{selectedColour.hex}</em></span>
           </div>
+          {regions.length > 0 && (
+            <div className="editor-regions" aria-label="Wall regions">
+              <span className="editor-region-heading">Wall regions</span>
+              {regions.map((region) => (
+                <div className={`editor-region ${activeRegionId === region.id ? 'active' : ''}`} key={region.id}>
+                  <button type="button" onClick={() => { setActiveRegionId(region.id); onSelectColor(region.color) }}>
+                    <span className="editor-palette-swatch" style={{ backgroundColor: region.color }} />
+                    <span>{region.name}</span>
+                  </button>
+                  <input
+                    value={region.name}
+                    aria-label={`Rename ${region.name}`}
+                    onChange={(event) => renameRegion(region.id, event.target.value)}
+                  />
+                  <button type="button" onClick={() => deleteRegion(region.id)} aria-label={`Delete ${region.name}`}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
           <form className="editor-custom-colour" onSubmit={submitCustomColour}>
             <label htmlFor="custom-hex">Custom hex</label>
             <div>
@@ -87,7 +115,7 @@ function EditorSidebar({
               <span>Recently used</span>
               <div>
                 {recentColors.map((hex) => (
-                  <button type="button" key={hex} className={`editor-recent-swatch ${selectedColor === hex ? 'active' : ''}`} style={{ backgroundColor: hex }} onClick={() => selectColor(hex)} aria-label={`Use recent colour ${hex}`} title={hex} />
+                  <button type="button" key={hex} className={`editor-recent-swatch ${selectedColor === hex ? 'active' : ''}`} style={{ backgroundColor: hex }} onClick={() => onSelectColor(hex)} aria-label={`Use recent colour ${hex}`} title={hex} />
                 ))}
               </div>
             </div>
@@ -97,8 +125,8 @@ function EditorSidebar({
               <button
                 type="button"
                 className={`editor-palette-item ${selectedColor === colour.hex ? 'active' : ''}`}
-                key={colour.hex}
-                onClick={() => selectColor(colour.hex)}
+                key={colour.id}
+                onClick={() => onSelectColor(colour.hex)}
               >
                 <span className="editor-palette-swatch" style={{ backgroundColor: colour.hex }} />
                 <span><strong>{colour.name}</strong><small>{colour.category} · {colour.hex}</small></span>

@@ -5,6 +5,9 @@ import { env } from './config/env.js'
 import authRouter from './routes/auth.routes.js'
 import designRouter from './routes/design.routes.js'
 import healthRouter from './routes/health.routes.js'
+import paintColorRouter from './routes/paint-color.routes.js'
+import { ImageUploadValidationError } from './middleware/image-upload.middleware.js'
+import multer from 'multer'
 
 async function startServer() {
   try {
@@ -17,12 +20,19 @@ async function startServer() {
     app.use(express.json())
     app.use('/api/health', healthRouter)
     app.use('/api/auth', authRouter)
+    app.use('/api/colours', paintColorRouter)
     app.use('/api/designs', designRouter)
 
     app.use((error, _request, response, _next) => {
       const statusCode =
         Number.isInteger(error.statusCode)
           ? error.statusCode
+          : error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE'
+            ? 413
+            : error instanceof multer.MulterError
+              ? 400
+            : error instanceof ImageUploadValidationError
+              ? 400
           : error.name === 'ValidationError' || error.name === 'CastError'
             ? 400
             : error.code === 11000
@@ -35,6 +45,8 @@ async function startServer() {
         message:
           statusCode >= 500
             ? 'Something went wrong'
+            : statusCode === 413
+              ? 'Image must be 12 MB or smaller'
             : error.code === 11000
               ? 'A design with these details already exists'
               : error.message,

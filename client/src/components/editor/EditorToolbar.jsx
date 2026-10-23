@@ -18,6 +18,8 @@ function EditorToolbar({
   onDownload,
   canUndo,
   canRedo,
+  isSaving,
+  hasImage,
 }) {
   return (
     <header className="editor-toolbar">
@@ -30,15 +32,10 @@ function EditorToolbar({
         <span className="editor-title">Room editor</span>
       </div>
       <div className="editor-toolbar-actions">
-        <label className="editor-tool-button editor-upload-button">
+        <button type="button" className="editor-tool-button editor-upload-button" onClick={onUpload}>
           <ImagePlus size={15} />
           <span>Upload image</span>
-          <input
-            type="file"
-            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-            onChange={onUpload}
-          />
-        </label>
+        </button>
         <button type="button" className="editor-icon-button" onClick={onUndo} disabled={!canUndo} title="Undo">
           <Undo2 size={16} />
           <span>Undo</span>
@@ -51,11 +48,11 @@ function EditorToolbar({
           <RotateCcw size={16} />
           <span>Reset</span>
         </button>
-        <button type="button" className="editor-action-button" onClick={onSave}>
+        <button type="button" className="editor-action-button" onClick={onSave} disabled={isSaving}>
           <Save size={15} />
-          <span>Save</span>
+          <span>{isSaving ? 'Saving…' : 'Save'}</span>
         </button>
-        <button type="button" className="editor-action-button editor-download" onClick={onDownload}>
+        <button type="button" className="editor-action-button editor-download" onClick={onDownload} disabled={!hasImage}>
           <Download size={15} />
           <span>Download</span>
         </button>
@@ -65,4 +62,3 @@ function EditorToolbar({
 }
 
 export default EditorToolbar
-

@@ -4,6 +4,13 @@ const hexColorPattern = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
 const paintColorSchema = new mongoose.Schema(
   {
+    catalogueId: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      maxlength: 100,
+    },
     name: {
       type: String,
       required: true,

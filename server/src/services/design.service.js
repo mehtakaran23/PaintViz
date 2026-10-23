@@ -79,6 +79,19 @@ function validateSelections(selections) {
       points: selection.points.map(({ x, y }) => ({ x, y })),
     }
 
+    if (selection.regionId !== undefined) {
+      normalized.regionId = requireString(selection.regionId, 'regionId', 100)
+    }
+    if (selection.name !== undefined) {
+      normalized.name = requireString(selection.name, 'region name', 80)
+    }
+    if (selection.color !== undefined) {
+      if (!HEX_PATTERN.test(selection.color)) {
+        throw new DesignValidationError('Each wall region must use a valid six-digit colour')
+      }
+      normalized.color = selection.color.toUpperCase()
+    }
+
     if (selection.type === 'brush') {
       if (!['brush', 'eraser'].includes(selection.mode)) {
         throw new DesignValidationError('Brush selections must specify brush or eraser mode')

@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../context/useAuth.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingIndicator from '../components/ui/LoadingIndicator.jsx'
-import { listDesigns } from '../services/designService.js'
+import { deleteDesign, listDesigns } from '../services/designService.js'
 
 function initials(name = '') {
   return name
@@ -28,6 +28,7 @@ function Dashboard() {
   const [designs, setDesigns] = useState([])
   const [isLoadingDesigns, setIsLoadingDesigns] = useState(true)
   const [designError, setDesignError] = useState('')
+  const [deletingId, setDeletingId] = useState('')
 
   useEffect(() => {
     let isMounted = true
@@ -45,6 +46,20 @@ function Dashboard() {
       isMounted = false
     }
   }, [token])
+
+  const handleDelete = async (designId) => {
+    if (!window.confirm('Delete this saved design?')) return
+    setDeletingId(designId)
+    setDesignError('')
+    try {
+      await deleteDesign(token, designId)
+      setDesigns((current) => current.filter((design) => design._id !== designId))
+    } catch (error) {
+      setDesignError(error.message)
+    } finally {
+      setDeletingId('')
+    }
+  }
 
   return (
     <div className="dashboard-layout">
@@ -103,7 +118,8 @@ function Dashboard() {
               {designs.map((design) => (
                 <article className="saved-design-card" key={design._id}>
                   <div className="saved-design-colour" style={{ backgroundColor: design.selectedColors?.[0]?.hexCode || '#DCCDBB' }} />
-                  <div><strong>{design.title}</strong><span>{design.selectedColors?.length || 0} selected colours · {new Date(design.updatedAt).toLocaleDateString()}</span></div>
+                  <div><Link to={`/editor?designId=${design._id}`}><strong>{design.title}</strong></Link><span>{design.selectedColors?.length || 0} selected colours · {new Date(design.updatedAt).toLocaleDateString()}</span></div>
+                  <button type="button" className="saved-design-delete" onClick={() => handleDelete(design._id)} disabled={deletingId === design._id}>{deletingId === design._id ? 'Deleting…' : 'Delete'}</button>
                 </article>
               ))}
             </div>

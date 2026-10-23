@@ -26,6 +26,7 @@ function drawMask(maskContext, operations, width, height) {
       maskContext.closePath()
       maskContext.fill()
     }
+
     if (operation.type === 'brush') {
       maskContext.globalCompositeOperation =
         operation.mode === 'eraser' ? 'destination-out' : 'source-over'
@@ -37,6 +38,35 @@ function drawMask(maskContext, operations, width, height) {
       maskContext.globalCompositeOperation = 'source-over'
     }
   })
+}
+
+function drawRegionPreview(context, operations, width, height, blendStrength) {
+  const groups = operations.reduce((map, operation) => {
+    const key = operation.regionId || 'legacy'
+    if (!map.has(key)) map.set(key, { color: operation.color || '#A8B29C', operations: [] })
+    map.get(key).operations.push(operation)
+    return map
+  }, new Map())
+
+  groups.forEach(({ color, operations: regionOperations }) => {
+    const mask = document.createElement('canvas')
+    mask.width = width
+    mask.height = height
+    drawMask(mask.getContext('2d'), regionOperations, width, height)
+    const colourLayer = document.createElement('canvas')
+    colourLayer.width = width
+    colourLayer.height = height
+    const colourContext = colourLayer.getContext('2d')
+    colourContext.fillStyle = color
+    colourContext.fillRect(0, 0, width, height)
+    colourContext.globalCompositeOperation = 'destination-in'
+    colourContext.drawImage(mask, 0, 0)
+    context.globalAlpha = blendStrength / 100
+    context.globalCompositeOperation = 'multiply'
+    context.drawImage(colourLayer, 0, 0)
+  })
+  context.globalAlpha = 1
+  context.globalCompositeOperation = 'source-over'
 }
 
 function drawOutline(context, operations, draftPolygon, width, height) {
@@ -75,27 +105,26 @@ function EditorCanvas({
   draftPolygon,
   tool,
   brushSize,
-  selectedColor,
   blendStrength,
   isBefore,
   onAddPoint,
   onFinishPolygon,
   onCancelPolygon,
   onAddOperation,
-  onDownloadReady,
+  onDownloadImageReady,
+  onRequestUpload,
 }) {
   const displayCanvasRef = useRef(null)
   const overlayCanvasRef = useRef(null)
-  const maskCanvasRef = useRef(null)
   const imageRef = useRef(null)
   const frameRef = useRef(null)
   const strokePointsRef = useRef([])
-  const onDownloadReadyRef = useRef(onDownloadReady)
+  const onDownloadImageReadyRef = useRef(onDownloadImageReady)
   const [isDrawing, setIsDrawing] = useState(false)
 
   useEffect(() => {
-    onDownloadReadyRef.current = onDownloadReady
-  }, [onDownloadReady])
+    onDownloadImageReadyRef.current = onDownloadImageReady
+  }, [onDownloadImageReady])
 
   const render = useCallback(() => {
     const canvas = displayCanvasRef.current
@@ -114,37 +143,17 @@ function EditorCanvas({
       target.style.height = `${rect.height}px`
     })
 
-    const mask = maskCanvasRef.current || document.createElement('canvas')
-    mask.width = width
-    mask.height = height
-    maskCanvasRef.current = mask
-    const maskContext = mask.getContext('2d')
-    maskContext.imageSmoothingEnabled = true
-    drawMask(maskContext, operations, width, height)
-
     const context = canvas.getContext('2d')
     context.clearRect(0, 0, width, height)
     context.drawImage(imageRef.current, 0, 0, width, height)
 
     if (!isBefore && operations.length) {
-      const colourLayer = document.createElement('canvas')
-      colourLayer.width = width
-      colourLayer.height = height
-      const colourContext = colourLayer.getContext('2d')
-      colourContext.fillStyle = selectedColor
-      colourContext.fillRect(0, 0, width, height)
-      colourContext.globalCompositeOperation = 'destination-in'
-      colourContext.drawImage(mask, 0, 0)
-      context.globalAlpha = blendStrength / 100
-      context.globalCompositeOperation = 'multiply'
-      context.drawImage(colourLayer, 0, 0)
-      context.globalAlpha = 1
-      context.globalCompositeOperation = 'source-over'
+      drawRegionPreview(context, operations, width, height, blendStrength)
     }
 
     drawOutline(overlay.getContext('2d'), operations, draftPolygon, width, height)
-    onDownloadReadyRef.current(() => canvas.toDataURL('image/png'))
-  }, [blendStrength, draftPolygon, isBefore, operations, selectedColor])
+    onDownloadImageReadyRef.current(() => canvas.toDataURL('image/png'))
+  }, [blendStrength, draftPolygon, isBefore, operations])
 
   useEffect(() => {
     if (!image) {
@@ -201,7 +210,7 @@ function EditorCanvas({
     strokePointsRef.current.push(point)
   }
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (event) => {
     if (!isDrawing) return
     setIsDrawing(false)
     if (strokePointsRef.current.length > 1) {
@@ -219,7 +228,7 @@ function EditorCanvas({
     <div className={`editor-canvas-frame ${!image ? 'is-empty' : ''}`} ref={frameRef}>
       {!image && (
         <div className="editor-empty-state">
-          <div className="editor-empty-icon">+</div>
+          <button type="button" className="editor-empty-icon" onClick={onRequestUpload} aria-label="Choose a room image">+</button>
           <h2>Bring a room to life.</h2>
           <p>Upload a JPG, PNG or WebP photo to start selecting walls manually.</p>
           <span>PaintViz is a visual preview tool — not an exact paint simulation.</span>

@@ -1080,6 +1080,76 @@ input:focus-visible {
   display: block;
 }
 
+.saved-design-delete {
+  margin-left: auto;
+  padding: 5px 7px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 0.62rem;
+}
+
+.saved-design-delete:hover:not(:disabled) {
+  color: var(--walnut);
+  border-color: var(--walnut);
+}
+
+.editor-regions {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.editor-region-heading {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.editor-region {
+  display: grid;
+  grid-template-columns: 1fr 74px 24px;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--line);
+}
+
+.editor-region.active {
+  border-color: var(--walnut);
+  background: #f7f1e8;
+}
+
+.editor-region button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  font-size: 0.68rem;
+  text-align: left;
+}
+
+.editor-region button:last-child {
+  justify-content: center;
+  color: var(--muted);
+}
+
+.editor-region input {
+  width: 100%;
+  min-width: 0;
+  padding: 3px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 0.62rem;
+}
+
 .saved-design-card strong {
   color: var(--ink);
   font-size: 0.78rem;
@@ -1494,6 +1564,17 @@ input:focus-visible {
   background: #e7efe4;
 }
 
+.editor-info {
+  color: #5f573f;
+  background: #f4eedf;
+}
+
+.editor-catalogue-status {
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
 .editor-canvas-shell {
   display: flex;
   align-items: center;
@@ -1557,6 +1638,17 @@ input:focus-visible {
   border-radius: 50%;
   font-size: 1.8rem;
   font-weight: 300;
+  cursor: pointer;
+  border: 0;
+  font: inherit;
+}
+
+.editor-hidden-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .editor-empty-state h2 {

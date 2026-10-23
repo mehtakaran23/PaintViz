@@ -39,7 +39,6 @@ function readImageUrl(imageUrl) {
 
 export function useRoomEditor() {
   const [image, setImage] = useState(null)
-  const [operations, setOperations] = useState([])
   const [regions, setRegions] = useState([])
   const [activeRegionId, setActiveRegionId] = useState(null)
   const [selectedColor, setSelectedColor] = useState('#A8B29C')
@@ -53,6 +52,8 @@ export function useRoomEditor() {
   const [isBefore, setIsBefore] = useState(false)
   const [status, setStatus] = useState('')
   const [processedImageUrl, setProcessedImageUrl] = useState('')
+  const [originalImagePublicId, setOriginalImagePublicId] = useState('')
+  const [processedImagePublicId, setProcessedImagePublicId] = useState('')
   const objectUrlRef = useRef(null)
 
   useEffect(() => () => {
@@ -65,7 +66,8 @@ export function useRoomEditor() {
     objectUrlRef.current = nextImage.imageUrl
     setImage(nextImage)
     setProcessedImageUrl('')
-    setOperations([])
+    setOriginalImagePublicId('')
+    setProcessedImagePublicId('')
     setRegions([])
     setActiveRegionId(null)
     setHistory([])
@@ -84,6 +86,8 @@ export function useRoomEditor() {
     }
     setImage(nextImage)
     setProcessedImageUrl(design.processedImageUrl || '')
+    setOriginalImagePublicId(design.originalImagePublicId || '')
+    setProcessedImagePublicId(design.processedImagePublicId || '')
     const savedSelections = design.wallSelections || []
     const migratedRegions = savedSelections.some((item) => item.regionId)
       ? savedSelections.reduce((groups, item) => {
@@ -98,7 +102,6 @@ export function useRoomEditor() {
         : []
     setRegions(migratedRegions)
     setActiveRegionId(migratedRegions[0]?.id || null)
-    setOperations(savedSelections)
     setSelectedColor(migratedRegions[0]?.color || design.selectedColors?.[0]?.hexCode || '#A8B29C')
     setBlendStrength(design.editorSettings?.blendStrength ?? 48)
     setTool(design.editorSettings?.tool || 'polygon')
@@ -122,7 +125,7 @@ export function useRoomEditor() {
 
   const addOperation = useCallback((operation) => {
     if (operation.type === 'brush' && operation.points.length < 2) return
-    setHistory((current) => [...current, { regions, selectedColor }])
+    setHistory((current) => [...current, { regions, selectedColor, activeRegionId }])
     const regionId = activeRegionId || `wall-${Date.now()}`
     setRegions((current) => {
       const region = current.find((item) => item.id === regionId)
@@ -130,14 +133,13 @@ export function useRoomEditor() {
       return [...current, { id: regionId, name: `Wall ${current.length + 1}`, color: selectedColor, operations: [operation] }]
     })
     setActiveRegionId(regionId)
-    setOperations((current) => [...current, operation])
     setRedoStack([])
   }, [activeRegionId, regions, selectedColor])
 
   const selectColor = useCallback((color) => {
     if (!/^#[0-9a-fA-F]{6}$/.test(color) || color === selectedColor) return
     const nextColor = color.toUpperCase()
-    setHistory((current) => [...current, { regions, selectedColor }])
+    setHistory((current) => [...current, { regions, selectedColor, activeRegionId }])
     setSelectedColor(nextColor)
     if (activeRegionId) setRegions((current) => current.map((region) => region.id === activeRegionId ? { ...region, color: nextColor } : region))
     setRecentColors((current) => [
@@ -146,6 +148,13 @@ export function useRoomEditor() {
     ].slice(0, 8))
     setRedoStack([])
   }, [activeRegionId, regions, selectedColor])
+
+  const selectRegion = useCallback((regionId) => {
+    const region = regions.find((item) => item.id === regionId)
+    if (!region) return
+    setActiveRegionId(regionId)
+    setSelectedColor(region.color)
+  }, [regions])
 
   const addPolygonPoint = useCallback((point) => {
     setDraftPolygon((current) => [...current, point])
@@ -158,47 +167,35 @@ export function useRoomEditor() {
   const finishPolygon = useCallback(() => {
     if (draftPolygon.length < 3) return
     const operation = { type: 'polygon', points: draftPolygon }
-    setHistory((current) => [...current, { regions, selectedColor }])
+    setHistory((current) => [...current, { regions, selectedColor, activeRegionId }])
     const regionId = `wall-${Date.now()}`
     setRegions((current) => [...current, { id: regionId, name: `Wall ${current.length + 1}`, color: selectedColor, operations: [operation] }])
     setActiveRegionId(regionId)
-    setOperations((current) => [...current, operation])
     setRedoStack([])
     setDraftPolygon([])
-  }, [draftPolygon, regions, selectedColor])
+  }, [activeRegionId, draftPolygon, regions, selectedColor])
 
   const undo = useCallback(() => {
-    setHistory((current) => {
-      if (!current.length) return current
-      const previous = current[current.length - 1]
-      setRedoStack((redo) => [
-        ...redo,
-        { regions, selectedColor },
-      ])
-      setRegions(previous.regions)
-      setOperations(previous.regions.flatMap((region) => region.operations))
-      setSelectedColor(previous.selectedColor)
-      return current.slice(0, -1)
-    })
-  }, [regions, selectedColor])
+    if (!history.length) return
+    const previous = history[history.length - 1]
+    setRedoStack((current) => [...current, { regions, selectedColor, activeRegionId }])
+    setRegions(previous.regions)
+    setActiveRegionId(previous.activeRegionId || previous.regions[0]?.id || null)
+    setSelectedColor(previous.selectedColor)
+    setHistory((current) => current.slice(0, -1))
+  }, [activeRegionId, history, regions, selectedColor])
 
   const redo = useCallback(() => {
-    setRedoStack((current) => {
-      if (!current.length) return current
-      const next = current[current.length - 1]
-      setHistory((historyCurrent) => [
-        ...historyCurrent,
-        { regions, selectedColor },
-      ])
-      setRegions(next.regions)
-      setOperations(next.regions.flatMap((region) => region.operations))
-      setSelectedColor(next.selectedColor)
-      return current.slice(0, -1)
-    })
-  }, [regions, selectedColor])
+    if (!redoStack.length) return
+    const next = redoStack[redoStack.length - 1]
+    setHistory((current) => [...current, { regions, selectedColor, activeRegionId }])
+    setRegions(next.regions)
+    setActiveRegionId(next.activeRegionId || next.regions[0]?.id || null)
+    setSelectedColor(next.selectedColor)
+    setRedoStack((current) => current.slice(0, -1))
+  }, [activeRegionId, redoStack, regions, selectedColor])
 
   const reset = useCallback(() => {
-    setOperations([])
     setRegions([])
     setActiveRegionId(null)
     setHistory([])
@@ -215,22 +212,28 @@ export function useRoomEditor() {
     const savedAt = new Date().toISOString()
     localStorage.setItem(
       'paintviz.editorDraft',
-      JSON.stringify({ savedAt, selectedColor, operations }),
+      JSON.stringify({ savedAt, selectedColor, regions }),
     )
     setStatus('Saved on this device. Cloud design saving is not connected yet.')
-  }, [operations, selectedColor])
+  }, [regions, selectedColor])
 
   const renameRegion = useCallback((regionId, name) => {
     const trimmed = name.trim().slice(0, 80)
     if (!trimmed) return
+    const region = regions.find((item) => item.id === regionId)
+    if (!region || region.name === trimmed) return
+    setHistory((current) => [...current, { regions, selectedColor, activeRegionId }])
     setRegions((current) => current.map((region) => region.id === regionId ? { ...region, name: trimmed } : region))
-  }, [])
+    setRedoStack([])
+  }, [activeRegionId, regions, selectedColor])
 
   const deleteRegion = useCallback((regionId) => {
-    setHistory((current) => [...current, { regions, selectedColor }])
+    setHistory((current) => [...current, { regions, selectedColor, activeRegionId }])
     setRegions((current) => current.filter((region) => region.id !== regionId))
     setActiveRegionId((current) => current === regionId ? null : current)
-  }, [regions, selectedColor])
+    if (activeRegionId === regionId) setSelectedColor('#A8B29C')
+    setRedoStack([])
+  }, [activeRegionId, regions, selectedColor])
 
   return {
     image,
@@ -238,6 +241,7 @@ export function useRoomEditor() {
     regions,
     activeRegionId,
     setActiveRegionId,
+    selectRegion,
     renameRegion,
     deleteRegion,
     draftPolygon,
@@ -266,6 +270,8 @@ export function useRoomEditor() {
     originalFile: image?.file || null,
     originalImageUrl: image?.isObjectUrl ? '' : image?.imageUrl || '',
     processedImageUrl,
+    originalImagePublicId,
+    processedImagePublicId,
     saveLocally,
     blendStrength,
     setBlendStrength,

@@ -8,6 +8,22 @@ function pointFromEvent(event, element) {
   }
 }
 
+function containedImageRect(frame, image) {
+  const frameRect = frame.getBoundingClientRect()
+  const scale = Math.min(
+    frameRect.width / image.naturalWidth,
+    frameRect.height / image.naturalHeight,
+  )
+  const width = Math.max(1, Math.round(image.naturalWidth * scale))
+  const height = Math.max(1, Math.round(image.naturalHeight * scale))
+  return {
+    width,
+    height,
+    left: (frameRect.width - width) / 2,
+    top: (frameRect.height - height) / 2,
+  }
+}
+
 function drawPath(context, points, width, height) {
   if (!points.length) return
   context.beginPath()
@@ -132,15 +148,16 @@ function EditorCanvas({
     const frame = frameRef.current
     if (!canvas || !overlay || !frame || !imageRef.current) return
 
-    const rect = frame.getBoundingClientRect()
-    const ratio = window.devicePixelRatio || 1
-    const width = Math.max(1, Math.floor(rect.width * ratio))
-    const height = Math.max(1, Math.floor(rect.height * ratio))
+    const imageBounds = containedImageRect(frame, imageRef.current)
+    const width = imageRef.current.naturalWidth
+    const height = imageRef.current.naturalHeight
     ;[canvas, overlay].forEach((target) => {
       target.width = width
       target.height = height
-      target.style.width = `${rect.width}px`
-      target.style.height = `${rect.height}px`
+      target.style.width = `${imageBounds.width}px`
+      target.style.height = `${imageBounds.height}px`
+      target.style.left = `${imageBounds.left}px`
+      target.style.top = `${imageBounds.top}px`
     })
 
     const context = canvas.getContext('2d')

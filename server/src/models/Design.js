@@ -50,6 +50,18 @@ const designSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    originalImagePublicId: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      match: /^[A-Za-z0-9][A-Za-z0-9/_-]{0,299}$/,
+    },
+    processedImagePublicId: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      match: /^[A-Za-z0-9][A-Za-z0-9/_-]{0,299}$/,
+    },
     selectedColors: {
       type: [selectedColorSchema],
       default: [],

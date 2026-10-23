@@ -2,10 +2,11 @@ import mongoose from 'mongoose'
 import Design from '../models/Design.js'
 import DesignHistory from '../models/DesignHistory.js'
 
-const URL_PATTERN = /^https?:\/\/[^\s/$.?#].[^\s]*$/i
 const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/
 const MAX_SELECTIONS = 100
 const MAX_POINTS = 1000
+const CLOUDINARY_HOSTNAME = 'res.cloudinary.com'
+const PUBLIC_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9/_-]{0,299}$/
 
 export class DesignValidationError extends Error {
   constructor(message) {
@@ -34,12 +35,42 @@ function requireString(value, field, maxLength) {
   return trimmed
 }
 
+function optionalString(value, field, maxLength) {
+  if (value === undefined || value === null || value === '') return undefined
+  return requireString(value, field, maxLength)
+}
+
+function optionalPublicId(value, field) {
+  const normalized = optionalString(value, field, 300)
+  if (normalized === undefined) return undefined
+  if (!PUBLIC_ID_PATTERN.test(normalized) || normalized.includes('//') || normalized.includes('..')) {
+    throw new DesignValidationError(`${field} must be a valid Cloudinary public ID`)
+  }
+  return normalized
+}
+
 function optionalUrl(value, field) {
   if (value === undefined || value === null || value === '') return undefined
-  if (typeof value !== 'string' || !URL_PATTERN.test(value.trim())) {
+  if (typeof value !== 'string') {
     throw new DesignValidationError(`${field} must be a valid http or https URL`)
   }
-  return value.trim()
+  let parsedUrl
+  try {
+    parsedUrl = new URL(value.trim())
+  } catch {
+    throw new DesignValidationError(`${field} must be a valid http or https URL`)
+  }
+  if (
+    parsedUrl.protocol !== 'https:' ||
+    parsedUrl.hostname !== CLOUDINARY_HOSTNAME ||
+    parsedUrl.port ||
+    /^https:\/\/[^/]+:/i.test(value.trim()) ||
+    parsedUrl.username ||
+    parsedUrl.password
+  ) {
+    throw new DesignValidationError(`${field} must be a secure Cloudinary URL`)
+  }
+  return parsedUrl.toString()
 }
 
 function validatePoint(point) {
@@ -48,6 +79,8 @@ function validatePoint(point) {
     typeof point !== 'object' ||
     typeof point.x !== 'number' ||
     typeof point.y !== 'number' ||
+    !Number.isFinite(point.x) ||
+    !Number.isFinite(point.y) ||
     point.x < 0 ||
     point.x > 1 ||
     point.y < 0 ||
@@ -69,8 +102,9 @@ function validateSelections(selections) {
     if (!['polygon', 'brush'].includes(selection.type)) {
       throw new DesignValidationError('Wall selection type must be polygon or brush')
     }
-    if (!Array.isArray(selection.points) || selection.points.length < 2 || selection.points.length > MAX_POINTS) {
-      throw new DesignValidationError(`Each wall selection must contain 2 to ${MAX_POINTS} points`)
+    const minimumPoints = selection.type === 'polygon' ? 3 : 2
+    if (!Array.isArray(selection.points) || selection.points.length < minimumPoints || selection.points.length > MAX_POINTS) {
+      throw new DesignValidationError(`Each ${selection.type} selection must contain ${minimumPoints} to ${MAX_POINTS} points`)
     }
     selection.points.forEach(validatePoint)
 
@@ -96,7 +130,12 @@ function validateSelections(selections) {
       if (!['brush', 'eraser'].includes(selection.mode)) {
         throw new DesignValidationError('Brush selections must specify brush or eraser mode')
       }
-      if (typeof selection.size !== 'number' || selection.size <= 0 || selection.size > 1) {
+      if (
+        typeof selection.size !== 'number' ||
+        !Number.isFinite(selection.size) ||
+        selection.size <= 0 ||
+        selection.size > 1
+      ) {
         throw new DesignValidationError('Brush size must be a normalized value greater than 0 and at most 1')
       }
       normalized.mode = selection.mode
@@ -149,6 +188,12 @@ function normalizePayload(payload, { partial = false } = {}) {
   if (payload.processedImageUrl !== undefined) {
     normalized.processedImageUrl = optionalUrl(payload.processedImageUrl, 'processedImageUrl')
   }
+  if (payload.originalImagePublicId !== undefined) {
+    normalized.originalImagePublicId = optionalPublicId(payload.originalImagePublicId, 'originalImagePublicId')
+  }
+  if (payload.processedImagePublicId !== undefined) {
+    normalized.processedImagePublicId = optionalPublicId(payload.processedImagePublicId, 'processedImagePublicId')
+  }
   if (!partial || payload.selectedColors !== undefined) {
     normalized.selectedColors = validateSelectedColors(payload.selectedColors || [])
   }
@@ -162,14 +207,16 @@ function normalizePayload(payload, { partial = false } = {}) {
     }
     if (
       settings.blendStrength !== undefined &&
-      (typeof settings.blendStrength !== 'number' || settings.blendStrength < 0 || settings.blendStrength > 100)
+      (typeof settings.blendStrength !== 'number' || !Number.isFinite(settings.blendStrength) || settings.blendStrength < 0 || settings.blendStrength > 100)
     ) {
       throw new DesignValidationError('blendStrength must be between 0 and 100')
     }
     normalized.editorSettings = {
       blendStrength: settings.blendStrength ?? 48,
-      tool: typeof settings.tool === 'string' ? settings.tool.slice(0, 30) : 'polygon',
-      brushSize: typeof settings.brushSize === 'number' ? Math.min(200, Math.max(1, settings.brushSize)) : 28,
+      tool: ['polygon', 'brush', 'eraser'].includes(settings.tool) ? settings.tool : 'polygon',
+      brushSize: typeof settings.brushSize === 'number' && Number.isFinite(settings.brushSize)
+        ? Math.min(200, Math.max(1, settings.brushSize))
+        : 28,
     }
   }
   return normalized

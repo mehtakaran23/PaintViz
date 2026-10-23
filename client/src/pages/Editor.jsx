@@ -108,21 +108,26 @@ function Editor() {
     setUploadProgress(0)
     try {
       let originalImageUrl = editor.originalImageUrl
+      let originalImagePublicId = editor.originalImagePublicId
       if (editor.originalFile) {
         editor.setStatus('Uploading original image...')
         const result = await uploadDesignImage(token, editor.originalFile, 'original', setUploadProgress)
         originalImageUrl = result.asset.url
+        originalImagePublicId = result.asset.publicId
       }
       if (!originalImageUrl) throw new Error('The original image is not available for cloud saving.')
 
       editor.setStatus('Uploading rendered preview...')
       const previewFile = dataUrlToFile(downloadImageRef.current(), 'paintviz-preview.png')
       const previewResult = await uploadDesignImage(token, previewFile, 'processed', setUploadProgress)
+      const processedImagePublicId = previewResult.asset.publicId
       const savedColours = [...new Set(editor.regions.map((region) => region.color || editor.selectedColor))]
       const payload = {
         title: title.trim() || 'Untitled room direction',
         originalImageUrl,
         processedImageUrl: previewResult.asset.url,
+        originalImagePublicId,
+        processedImagePublicId,
         selectedColors: savedColours.map((hexCode) => {
           const colour = catalogue.find((item) => item.hex === hexCode)
           return { ...(colour ? { colorId: colour.id } : {}), hexCode }
@@ -236,7 +241,7 @@ function Editor() {
           recentColors={editor.recentColors}
           regions={editor.regions}
           activeRegionId={editor.activeRegionId}
-          setActiveRegionId={editor.setActiveRegionId}
+          selectRegion={editor.selectRegion}
           renameRegion={editor.renameRegion}
           deleteRegion={editor.deleteRegion}
           catalogue={catalogue}

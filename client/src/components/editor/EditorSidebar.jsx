@@ -16,7 +16,7 @@ function EditorSidebar({
   recentColors,
   regions,
   activeRegionId,
-  setActiveRegionId,
+  selectRegion,
   renameRegion,
   deleteRegion,
   catalogue = localCatalogue,
@@ -88,7 +88,7 @@ function EditorSidebar({
               <span className="editor-region-heading">Wall regions</span>
               {regions.map((region) => (
                 <div className={`editor-region ${activeRegionId === region.id ? 'active' : ''}`} key={region.id}>
-                  <button type="button" onClick={() => { setActiveRegionId(region.id); onSelectColor(region.color) }}>
+                  <button type="button" onClick={() => selectRegion(region.id)}>
                     <span className="editor-palette-swatch" style={{ backgroundColor: region.color }} />
                     <span>{region.name}</span>
                   </button>

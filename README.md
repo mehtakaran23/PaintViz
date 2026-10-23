@@ -66,6 +66,10 @@ Set this public frontend variable in Vercel:
 
 - `VITE_API_URL=https://<your-render-service>.onrender.com/api`
 
+The frontend normalizes this value to exactly one `/api` suffix, so
+`https://<your-render-service>.onrender.com` also remains compatible. The
+registration and login URLs are `/api/auth/register` and `/api/auth/login`.
+
 Only `VITE_API_URL` belongs in the frontend environment. JWT, MongoDB, and
 Cloudinary credentials must remain backend-only. The `client/vercel.json`
 rewrite allows direct refreshes of `/dashboard` and `/editor`.

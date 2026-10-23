@@ -1,5 +1,9 @@
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+export function normalizeApiBaseUrl(value) {
+  const configuredUrl = (value || 'http://localhost:5000/api').trim().replace(/\/+$/, '')
+  return configuredUrl.endsWith('/api') ? configuredUrl : `${configuredUrl}/api`
+}
+
+export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL)
 
 export class ApiError extends Error {
   constructor(message, status) {

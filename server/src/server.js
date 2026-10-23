@@ -24,9 +24,12 @@ async function startServer() {
     app.use('/api/designs', designRouter)
 
     app.use((error, _request, response, _next) => {
+      const isJsonBodyTooLarge = error.type === 'entity.too.large'
       const statusCode =
         Number.isInteger(error.statusCode)
           ? error.statusCode
+          : isJsonBodyTooLarge
+            ? 413
           : error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE'
             ? 413
             : error instanceof multer.MulterError
@@ -45,6 +48,8 @@ async function startServer() {
         message:
           statusCode >= 500
             ? 'Something went wrong'
+            : isJsonBodyTooLarge
+              ? 'Request body is too large'
             : statusCode === 413
               ? 'Image must be 12 MB or smaller'
             : error.code === 11000

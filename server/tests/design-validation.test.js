@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { DesignValidationError, normalizeDesignPayload } from '../src/services/design.service.js'
+import {
+  DesignValidationError,
+  normalizeDesignPayload,
+  ownDesignQuery,
+} from '../src/services/design.service.js'
 
 const validPayload = {
   title: 'Living room',
@@ -23,6 +27,40 @@ test('normalizes a valid region design payload', () => {
   assert.equal(normalized.wallSelections[0].color, '#A8B29C')
   assert.equal(normalized.wallSelections[0].points[2].y, 0.9)
   assert.equal(normalized.originalImagePublicId, validPayload.originalImagePublicId)
+})
+
+test('accepts legacy flat wall selections without region metadata', () => {
+  const legacyPayload = {
+    ...validPayload,
+    wallSelections: [{
+      type: 'polygon',
+      points: validPayload.wallSelections[0].points,
+    }],
+  }
+  const normalized = normalizeDesignPayload(legacyPayload)
+  assert.deepEqual(normalized.wallSelections, legacyPayload.wallSelections)
+})
+
+test('preserves multiple region identities and colours', () => {
+  const multiRegionPayload = {
+    ...validPayload,
+    wallSelections: [
+      ...validPayload.wallSelections,
+      {
+        type: 'brush',
+        mode: 'brush',
+        size: 0.04,
+        regionId: 'wall-2',
+        name: 'Second wall',
+        color: '#6A8294',
+        points: [{ x: 0.1, y: 0.2 }, { x: 0.2, y: 0.3 }],
+      },
+    ],
+  }
+  const normalized = normalizeDesignPayload(multiRegionPayload)
+  assert.equal(normalized.wallSelections[0].regionId, 'wall-1')
+  assert.equal(normalized.wallSelections[1].regionId, 'wall-2')
+  assert.equal(normalized.wallSelections[1].color, '#6A8294')
 })
 
 test('rejects non-Cloudinary, lookalike, and port-qualified image URLs', () => {
@@ -62,4 +100,11 @@ test('rejects malformed public IDs and non-finite editor settings', () => {
     () => normalizeDesignPayload({ ...validPayload, editorSettings: { blendStrength: Number.POSITIVE_INFINITY } }),
     (error) => error instanceof DesignValidationError,
   )
+})
+
+test('scopes design queries to the authenticated owner', () => {
+  const userId = '507f1f77bcf86cd799439011'
+  const designId = '507f191e810c19729de860ea'
+  const query = ownDesignQuery(userId, designId)
+  assert.deepEqual(query.getFilter(), { _id: designId, user: userId })
 })

@@ -10,14 +10,6 @@ import { createDesign, getDesign, updateDesign, uploadDesignImage } from '../ser
 import { paintCatalogue } from '../data/paintCatalogue.js'
 import { listPaintColors } from '../services/paintColorService.js'
 
-function dataUrlToFile(dataUrl, name) {
-  const [header, encoded] = dataUrl.split(',')
-  const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png'
-  const binary = atob(encoded)
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
-  return new File([bytes], name, { type: mimeType })
-}
-
 function Editor() {
   const editor = useRoomEditor()
   const { loadSavedDesign } = editor
@@ -33,6 +25,7 @@ function Editor() {
   const [catalogueLoading, setCatalogueLoading] = useState(true)
   const [catalogueError, setCatalogueError] = useState('')
   const downloadImageRef = useRef(null)
+  const imageBlobRef = useRef(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -109,16 +102,22 @@ function Editor() {
     try {
       let originalImageUrl = editor.originalImageUrl
       let originalImagePublicId = editor.originalImagePublicId
-      if (editor.originalFile) {
+      if (editor.cloudOriginalImage?.url) {
+        originalImageUrl = editor.cloudOriginalImage.url
+        originalImagePublicId = editor.cloudOriginalImage.publicId
+      } else if (editor.originalFile) {
         editor.setStatus('Uploading original image...')
         const result = await uploadDesignImage(token, editor.originalFile, 'original', setUploadProgress)
         originalImageUrl = result.asset.url
         originalImagePublicId = result.asset.publicId
+        editor.setCloudOriginalImage(result.asset)
       }
       if (!originalImageUrl) throw new Error('The original image is not available for cloud saving.')
 
       editor.setStatus('Uploading rendered preview...')
-      const previewFile = dataUrlToFile(downloadImageRef.current(), 'paintviz-preview.png')
+      if (!imageBlobRef.current) throw new Error('The rendered preview is not available yet.')
+      const previewBlob = await imageBlobRef.current('image/png')
+      const previewFile = new File([previewBlob], 'paintviz-preview.png', { type: 'image/png' })
       const previewResult = await uploadDesignImage(token, previewFile, 'processed', setUploadProgress)
       const processedImagePublicId = previewResult.asset.publicId
       const savedColours = [...new Set(editor.regions.map((region) => region.color || editor.selectedColor))]
@@ -147,7 +146,7 @@ function Editor() {
     } catch (saveError) {
       setError(saveError.message)
       editor.saveLocally()
-      editor.setStatus(`Cloud save unavailable. Saved a local draft instead: ${saveError.message}`)
+      editor.setStatus(`Cloud save unavailable. Current editor state is retained for this session: ${saveError.message}`)
     } finally {
       setIsSaving(false)
       setUploadProgress(0)
@@ -212,6 +211,9 @@ function Editor() {
               onAddOperation={editor.addOperation}
               onDownloadImageReady={(getImage) => {
                 downloadImageRef.current = getImage
+              }}
+              onImageBlobReady={(getBlob) => {
+                imageBlobRef.current = getBlob
               }}
               onRequestUpload={openFilePicker}
             />

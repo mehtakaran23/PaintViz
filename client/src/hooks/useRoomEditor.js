@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const MAX_FILE_SIZE = 12 * 1024 * 1024
+const MAX_IMAGE_DIMENSION = 8000
+const MAX_IMAGE_PIXELS = 25_000_000
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+function validateImageDimensions(image) {
+  if (
+    image.naturalWidth > MAX_IMAGE_DIMENSION ||
+    image.naturalHeight > MAX_IMAGE_DIMENSION ||
+    image.naturalWidth * image.naturalHeight > MAX_IMAGE_PIXELS
+  ) {
+    throw new Error('Choose an image no larger than 8000px per side and 25 megapixels.')
+  }
+}
 
 function readImageFile(file) {
   return new Promise((resolve, reject) => {
@@ -17,7 +29,16 @@ function readImageFile(file) {
 
     const imageUrl = URL.createObjectURL(file)
     const image = new Image()
-    image.onload = () => resolve({ imageUrl, image, file, isObjectUrl: true })
+    image.onload = () => {
+      try {
+        validateImageDimensions(image)
+      } catch (error) {
+        URL.revokeObjectURL(imageUrl)
+        reject(error)
+        return
+      }
+      resolve({ imageUrl, image, file, isObjectUrl: true })
+    }
     image.onerror = () => {
       URL.revokeObjectURL(imageUrl)
       reject(new Error('That image could not be read. Try another file.'))
@@ -31,7 +52,14 @@ function readImageUrl(imageUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.crossOrigin = 'anonymous'
-    image.onload = () => resolve({ imageUrl, image, file: null, isObjectUrl: false })
+    image.onload = () => {
+      try {
+        validateImageDimensions(image)
+        resolve({ imageUrl, image, file: null, isObjectUrl: false })
+      } catch (error) {
+        reject(error)
+      }
+    }
     image.onerror = () => reject(new Error('The saved room image could not be loaded.'))
     image.src = imageUrl
   })
@@ -54,6 +82,7 @@ export function useRoomEditor() {
   const [processedImageUrl, setProcessedImageUrl] = useState('')
   const [originalImagePublicId, setOriginalImagePublicId] = useState('')
   const [processedImagePublicId, setProcessedImagePublicId] = useState('')
+  const [cloudOriginalImage, setCloudOriginalImage] = useState(null)
   const objectUrlRef = useRef(null)
 
   useEffect(() => () => {
@@ -68,6 +97,7 @@ export function useRoomEditor() {
     setProcessedImageUrl('')
     setOriginalImagePublicId('')
     setProcessedImagePublicId('')
+    setCloudOriginalImage(null)
     setRegions([])
     setActiveRegionId(null)
     setHistory([])
@@ -88,6 +118,10 @@ export function useRoomEditor() {
     setProcessedImageUrl(design.processedImageUrl || '')
     setOriginalImagePublicId(design.originalImagePublicId || '')
     setProcessedImagePublicId(design.processedImagePublicId || '')
+    setCloudOriginalImage({
+      url: design.originalImageUrl,
+      publicId: design.originalImagePublicId || '',
+    })
     const savedSelections = design.wallSelections || []
     const migratedRegions = savedSelections.some((item) => item.regionId)
       ? savedSelections.reduce((groups, item) => {
@@ -212,10 +246,17 @@ export function useRoomEditor() {
     const savedAt = new Date().toISOString()
     localStorage.setItem(
       'paintviz.editorDraft',
-      JSON.stringify({ savedAt, selectedColor, regions }),
+      JSON.stringify({
+        savedAt,
+        selectedColor,
+        regions,
+        blendStrength,
+        tool,
+        brushSize,
+      }),
     )
-    setStatus('Saved on this device. Cloud design saving is not connected yet.')
-  }, [regions, selectedColor])
+    setStatus('Cloud save failed. Your current editor state is retained for this session; the image is not stored locally.')
+  }, [blendStrength, brushSize, regions, selectedColor, tool])
 
   const renameRegion = useCallback((regionId, name) => {
     const trimmed = name.trim().slice(0, 80)
@@ -272,6 +313,8 @@ export function useRoomEditor() {
     processedImageUrl,
     originalImagePublicId,
     processedImagePublicId,
+    cloudOriginalImage,
+    setCloudOriginalImage,
     saveLocally,
     blendStrength,
     setBlendStrength,

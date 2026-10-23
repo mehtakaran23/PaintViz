@@ -28,6 +28,51 @@ const selectedColorSchema = new mongoose.Schema(
   },
 )
 
+const pointSchema = new mongoose.Schema(
+  {
+    x: { type: Number, required: true, min: 0, max: 1 },
+    y: { type: Number, required: true, min: 0, max: 1 },
+  },
+  { _id: false },
+)
+
+const wallSelectionSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ['polygon', 'brush'],
+      required: true,
+    },
+    points: {
+      type: [pointSchema],
+      required: true,
+      validate: [
+        {
+          validator: (points) => points.length >= 2 && points.length <= 1000,
+          message: 'A wall selection must contain between 2 and 1000 points',
+        },
+        {
+          validator: function validatePointCount(points) {
+            return this.type !== 'polygon' || points.length >= 3
+          },
+          message: 'A polygon selection must contain at least 3 points',
+        },
+      ],
+    },
+    regionId: { type: String, trim: true, maxlength: 100 },
+    name: { type: String, trim: true, maxlength: 80 },
+    color: {
+      type: String,
+      uppercase: true,
+      trim: true,
+      match: /^#[0-9A-F]{6}$/,
+    },
+    mode: { type: String, enum: ['brush', 'eraser'] },
+    size: { type: Number, min: 0.0001, max: 1 },
+  },
+  { _id: false, strict: true },
+)
+
 const designSchema = new mongoose.Schema(
   {
     user: {
@@ -67,8 +112,12 @@ const designSchema = new mongoose.Schema(
       default: [],
     },
     wallSelections: {
-      type: [mongoose.Schema.Types.Mixed],
+      type: [wallSelectionSchema],
       default: [],
+      validate: {
+        validator: (selections) => selections.length <= 100,
+        message: 'A design cannot contain more than 100 wall selections',
+      },
     },
     editorSettings: {
       blendStrength: {
@@ -92,6 +141,8 @@ const designSchema = new mongoose.Schema(
   },
   { timestamps: true },
 )
+
+designSchema.index({ user: 1, updatedAt: -1 })
 
 const Design = mongoose.models.Design || mongoose.model('Design', designSchema)
 

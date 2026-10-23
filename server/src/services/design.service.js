@@ -211,12 +211,19 @@ function normalizePayload(payload, { partial = false } = {}) {
     ) {
       throw new DesignValidationError('blendStrength must be between 0 and 100')
     }
+    if (settings.tool !== undefined && !['polygon', 'brush', 'eraser'].includes(settings.tool)) {
+      throw new DesignValidationError('tool must be polygon, brush, or eraser')
+    }
+    if (
+      settings.brushSize !== undefined &&
+      (typeof settings.brushSize !== 'number' || !Number.isFinite(settings.brushSize) || settings.brushSize < 1 || settings.brushSize > 200)
+    ) {
+      throw new DesignValidationError('brushSize must be between 1 and 200')
+    }
     normalized.editorSettings = {
       blendStrength: settings.blendStrength ?? 48,
-      tool: ['polygon', 'brush', 'eraser'].includes(settings.tool) ? settings.tool : 'polygon',
-      brushSize: typeof settings.brushSize === 'number' && Number.isFinite(settings.brushSize)
-        ? Math.min(200, Math.max(1, settings.brushSize))
-        : 28,
+      tool: settings.tool ?? 'polygon',
+      brushSize: settings.brushSize ?? 28,
     }
   }
   return normalized

@@ -49,14 +49,29 @@ function drawMask(maskContext, operations, width, height) {
       maskContext.lineCap = 'round'
       maskContext.lineJoin = 'round'
       maskContext.lineWidth = operation.size * width
-      drawPath(maskContext, operation.points, width, height)
-      maskContext.stroke()
+      const firstPoint = operation.points[0]
+      const isDab = operation.points.every((point) =>
+        point.x === firstPoint.x && point.y === firstPoint.y)
+      if (isDab) {
+        maskContext.beginPath()
+        maskContext.arc(
+          firstPoint.x * width,
+          firstPoint.y * height,
+          maskContext.lineWidth / 2,
+          0,
+          Math.PI * 2,
+        )
+        maskContext.fill()
+      } else {
+        drawPath(maskContext, operation.points, width, height)
+        maskContext.stroke()
+      }
       maskContext.globalCompositeOperation = 'source-over'
     }
   })
 }
 
-function drawRegionPreview(context, operations, width, height, blendStrength) {
+function drawRegionPreview(context, operations, width, height, blendStrength, layerCache) {
   const groups = operations.reduce((map, operation) => {
     const key = operation.regionId || 'legacy'
     if (!map.has(key)) map.set(key, { color: operation.color || '#A8B29C', operations: [] })
@@ -64,22 +79,31 @@ function drawRegionPreview(context, operations, width, height, blendStrength) {
     return map
   }, new Map())
 
-  groups.forEach(({ color, operations: regionOperations }) => {
-    const mask = document.createElement('canvas')
-    mask.width = width
-    mask.height = height
-    drawMask(mask.getContext('2d'), regionOperations, width, height)
-    const colourLayer = document.createElement('canvas')
-    colourLayer.width = width
-    colourLayer.height = height
-    const colourContext = colourLayer.getContext('2d')
+  groups.forEach(({ color, operations: regionOperations }, key) => {
+    let layers = layerCache.get(key)
+    if (!layers || layers.width !== width || layers.height !== height) {
+      layers = {
+        width,
+        height,
+        mask: document.createElement('canvas'),
+        colourLayer: document.createElement('canvas'),
+      }
+      layers.mask.width = width
+      layers.mask.height = height
+      layers.colourLayer.width = width
+      layers.colourLayer.height = height
+      layerCache.set(key, layers)
+    }
+    drawMask(layers.mask.getContext('2d'), regionOperations, width, height)
+    const colourContext = layers.colourLayer.getContext('2d')
+    colourContext.clearRect(0, 0, width, height)
     colourContext.fillStyle = color
     colourContext.fillRect(0, 0, width, height)
     colourContext.globalCompositeOperation = 'destination-in'
-    colourContext.drawImage(mask, 0, 0)
+    colourContext.drawImage(layers.mask, 0, 0)
     context.globalAlpha = blendStrength / 100
     context.globalCompositeOperation = 'multiply'
-    context.drawImage(colourLayer, 0, 0)
+    context.drawImage(layers.colourLayer, 0, 0)
   })
   context.globalAlpha = 1
   context.globalCompositeOperation = 'source-over'
@@ -128,6 +152,7 @@ function EditorCanvas({
   onCancelPolygon,
   onAddOperation,
   onDownloadImageReady,
+  onImageBlobReady,
   onRequestUpload,
 }) {
   const displayCanvasRef = useRef(null)
@@ -136,11 +161,14 @@ function EditorCanvas({
   const frameRef = useRef(null)
   const strokePointsRef = useRef([])
   const onDownloadImageReadyRef = useRef(onDownloadImageReady)
+  const onImageBlobReadyRef = useRef(onImageBlobReady)
+  const layerCacheRef = useRef(new Map())
   const [isDrawing, setIsDrawing] = useState(false)
 
   useEffect(() => {
     onDownloadImageReadyRef.current = onDownloadImageReady
-  }, [onDownloadImageReady])
+    onImageBlobReadyRef.current = onImageBlobReady
+  }, [onDownloadImageReady, onImageBlobReady])
 
   const render = useCallback(() => {
     const canvas = displayCanvasRef.current
@@ -165,11 +193,21 @@ function EditorCanvas({
     context.drawImage(imageRef.current, 0, 0, width, height)
 
     if (!isBefore && operations.length) {
-      drawRegionPreview(context, operations, width, height, blendStrength)
+      const activeRegionIds = new Set(operations.map((operation) => operation.regionId || 'legacy'))
+      layerCacheRef.current.forEach((_layers, key) => {
+        if (!activeRegionIds.has(key)) layerCacheRef.current.delete(key)
+      })
+      drawRegionPreview(context, operations, width, height, blendStrength, layerCacheRef.current)
     }
 
     drawOutline(overlay.getContext('2d'), operations, draftPolygon, width, height)
     onDownloadImageReadyRef.current(() => canvas.toDataURL('image/png'))
+    onImageBlobReadyRef.current((type = 'image/png') => new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob)
+        else reject(new Error('The rendered preview could not be prepared.'))
+      }, type)
+    }))
   }, [blendStrength, draftPolygon, isBefore, operations])
 
   useEffect(() => {
@@ -230,12 +268,15 @@ function EditorCanvas({
   const handlePointerUp = (event) => {
     if (!isDrawing) return
     setIsDrawing(false)
-    if (strokePointsRef.current.length > 1) {
+    if (strokePointsRef.current.length > 0) {
+      const points = strokePointsRef.current.length > 1
+        ? strokePointsRef.current
+        : [strokePointsRef.current[0], strokePointsRef.current[0]]
       onAddOperation({
         type: 'brush',
         mode: tool,
         size: brushSize / event.currentTarget.getBoundingClientRect().width,
-        points: strokePointsRef.current,
+        points,
       })
     }
     strokePointsRef.current = []

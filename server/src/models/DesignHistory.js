@@ -26,6 +26,8 @@ const designHistorySchema = new mongoose.Schema(
   { timestamps: true },
 )
 
+designHistorySchema.index({ design: 1, user: 1, createdAt: -1 })
+
 const DesignHistory =
   mongoose.models.DesignHistory ||
   mongoose.model('DesignHistory', designHistorySchema)

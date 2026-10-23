@@ -5,6 +5,8 @@ import {
   normalizeDesignPayload,
   ownDesignQuery,
 } from '../src/services/design.service.js'
+import { validateImageBytes } from '../src/middleware/image-upload.middleware.js'
+import Design from '../src/models/Design.js'
 
 const validPayload = {
   title: 'Living room',
@@ -107,4 +109,42 @@ test('scopes design queries to the authenticated owner', () => {
   const designId = '507f191e810c19729de860ea'
   const query = ownDesignQuery(userId, designId)
   assert.deepEqual(query.getFilter(), { _id: designId, user: userId })
+})
+
+test('rejects an image whose verified dimensions exceed the working limit', () => {
+  const bytes = Buffer.alloc(24)
+  bytes[0] = 0x89
+  bytes[1] = 0x50
+  bytes[2] = 0x4e
+  bytes[3] = 0x47
+  bytes[4] = 0x0d
+  bytes[5] = 0x0a
+  bytes[6] = 0x1a
+  bytes[7] = 0x0a
+  bytes.writeUInt32BE(9000, 16)
+  bytes.writeUInt32BE(1000, 20)
+  assert.throws(
+    () => validateImageBytes({ buffer: bytes, mimetype: 'image/png' }),
+    /8000px per side/,
+  )
+})
+
+test('Mongoose design schema bounds wall selections and points', async () => {
+  const design = new Design({
+    user: '507f1f77bcf86cd799439011',
+    title: 'Bounded design',
+    originalImageUrl: 'https://res.cloudinary.com/demo/image/upload/room.jpg',
+    wallSelections: [{
+      type: 'polygon',
+      points: [{ x: 0, y: 0 }, { x: 1, y: 0 }],
+    }],
+  })
+  await assert.rejects(() => design.validate(), /polygon selection must contain at least 3 points/)
+})
+
+test('rejects unsupported editor settings instead of silently defaulting', () => {
+  assert.throws(
+    () => normalizeDesignPayload({ ...validPayload, editorSettings: { tool: 'magic' } }),
+    /tool must be polygon, brush, or eraser/,
+  )
 })

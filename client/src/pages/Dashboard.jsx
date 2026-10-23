@@ -23,6 +23,19 @@ function initials(name = '') {
     .join('')
 }
 
+function uniqueColourCount(designs) {
+  return new Set(
+    designs.flatMap((design) => (
+      design.selectedColors || []
+    ).map((colour) => {
+      if (!colour || typeof colour !== 'object') return null
+      const colourId = typeof colour.colorId === 'string' ? colour.colorId.trim() : ''
+      const hexCode = typeof colour.hexCode === 'string' ? colour.hexCode.trim().toUpperCase() : ''
+      return colourId || (/^#[0-9A-F]{6}$/.test(hexCode) ? hexCode : null)
+    }).filter(Boolean)),
+  ).size
+}
+
 function Dashboard() {
   const { user, token, logout } = useAuth()
   const [designs, setDesigns] = useState([])
@@ -75,7 +88,7 @@ function Dashboard() {
         </nav>
         <div className="sidebar-note">
           <strong>Ready to explore?</strong>
-          <p>Photo-based wall selection is coming next. Your studio is ready when you are.</p>
+          <p>Upload a room photo, explore wall colours and save your favourite directions.</p>
           <Link className="button button-primary button-small" to="/editor">Open editor</Link>
         </div>
         <button className="sidebar-link" type="button" onClick={logout}><LogOut size={16} /> Log out</button>
@@ -95,7 +108,7 @@ function Dashboard() {
 
         <section className="stats-grid" aria-label="Design statistics">
           <div className="stat-card"><span>Saved designs</span><strong>{designs.length}</strong></div>
-          <div className="stat-card"><span>Colours explored</span><strong>{new Set(designs.flatMap((design) => design.selectedColors || [])).size}</strong></div>
+          <div className="stat-card"><span>Colours explored</span><strong>{uniqueColourCount(designs)}</strong></div>
           <div className="stat-card"><span>Current direction</span><strong>{designs[0]?.title ? '1' : '—'}</strong></div>
         </section>
 
@@ -109,7 +122,7 @@ function Dashboard() {
           {!isLoadingDesigns && !designError && designs.length === 0 && (
             <EmptyState
               title="Your first room is waiting."
-              description="Upload a room photo and begin a manual wall selection. Persistent saving will be available once an image-storage URL is supplied."
+              description="Upload a room photo, select your walls manually, and save your paint direction to your account."
               action={<Link className="button button-primary button-small" to="/editor">Open editor <ArrowRight size={13} /></Link>}
             />
           )}
@@ -129,7 +142,7 @@ function Dashboard() {
         <section className="quick-actions" aria-label="Quick actions">
           <Link className="quick-action" to="/editor"><Plus size={18} /><span><strong>Start a direction</strong><span>Open the room editor</span></span></Link>
           <a className="quick-action" href="/#how-it-works"><Sparkles size={18} /><span><strong>See how it works</strong><span>Learn the PaintViz approach</span></span></a>
-          <span className="quick-action"><FolderOpen size={18} /><span><strong>Saved designs</strong><span>Available when the editor arrives</span></span></span>
+          <Link className="quick-action" to="/dashboard"><FolderOpen size={18} /><span><strong>Saved designs</strong><span>Open your saved room directions</span></span></Link>
         </section>
       </main>
     </div>

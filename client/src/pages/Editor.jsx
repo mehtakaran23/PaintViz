@@ -85,10 +85,15 @@ function Editor() {
       setError('Upload an image before downloading a preview.')
       return
     }
-    const link = document.createElement('a')
-    link.download = 'paintviz-preview.png'
-    link.href = downloadImageRef.current()
-    link.click()
+    try {
+      const imageUrl = downloadImageRef.current()
+      const link = document.createElement('a')
+      link.download = 'paintviz-preview.png'
+      link.href = imageUrl
+      link.click()
+    } catch {
+      setError('The preview could not be downloaded. Try again.')
+    }
   }, [])
 
   const saveDesign = async () => {

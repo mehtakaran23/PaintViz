@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 function pointFromEvent(event, element) {
   const rect = element.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return null
   return {
     x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
     y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
@@ -243,6 +244,7 @@ function EditorCanvas({
     if (!imageRef.current) return
     event.currentTarget.setPointerCapture(event.pointerId)
     const point = pointFromEvent(event, event.currentTarget)
+    if (!point) return
     if (tool === 'polygon') {
       if (draftPolygon.length >= 3) {
         const first = draftPolygon[0]
@@ -262,6 +264,7 @@ function EditorCanvas({
   const handlePointerMove = (event) => {
     if (!isDrawing || (tool !== 'brush' && tool !== 'eraser')) return
     const point = pointFromEvent(event, event.currentTarget)
+    if (!point) return
     strokePointsRef.current.push(point)
   }
 

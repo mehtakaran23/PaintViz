@@ -97,6 +97,7 @@ function drawRegionPreview(context, operations, width, height, blendStrength, la
     }
     drawMask(layers.mask.getContext('2d'), regionOperations, width, height)
     const colourContext = layers.colourLayer.getContext('2d')
+    colourContext.globalCompositeOperation = 'source-over'
     colourContext.clearRect(0, 0, width, height)
     colourContext.fillStyle = color
     colourContext.fillRect(0, 0, width, height)
